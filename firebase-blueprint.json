@@ -1,0 +1,48 @@
+{
+  "entities": {
+    "Student": {
+      "collectionName": "students",
+      "fields": {
+        "name": { "type": "string", "required": true },
+        "group": { "type": "string", "required": true },
+        "avatarColor": { "type": "string", "required": true },
+        "role": { "type": "string", "required": false }
+      }
+    },
+    "Activity": {
+      "collectionName": "activities",
+      "fields": {
+        "title": { "type": "string", "required": true },
+        "dueDate": { "type": "string", "required": false },
+        "description": { "type": "string", "required": false },
+        "assignedStudentIds": { "type": "array", "required": false },
+        "targetGroup": { "type": "string", "required": false }
+      }
+    },
+    "Record": {
+      "collectionName": "records",
+      "fields": {
+        "studentId": { "type": "string", "required": true },
+        "activityId": { "type": "string", "required": true },
+        "status": { "type": "string", "required": true },
+        "updatedAt": { "type": "string", "required": true },
+        "notes": { "type": "string", "required": false }
+      }
+    },
+    "AuthorizedUser": {
+      "collectionName": "authorized_users",
+      "fields": {
+        "email": { "type": "string", "required": true },
+        "name": { "type": "string", "required": false },
+        "role": { "type": "string", "required": true },
+        "targetScope": { "type": "string", "required": true },
+        "allowedGroup": { "type": "string", "required": false },
+        "allowedStudentId": { "type": "string", "required": false },
+        "status": { "type": "string", "required": true },
+        "createdAt": { "type": "string", "required": true },
+        "invitedBy": { "type": "string", "required": false }
+      }
+    }
+  },
+  "securityRules": "rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    function isAuthenticated() {\n      return request.auth != null;\n    }\n    match /authorized_users/{userId} {\n      allow read: if true;\n      allow create, update, delete: if isAuthenticated();\n    }\n    match /students/{studentId} {\n      allow read: if true;\n      allow create, update, delete: if isAuthenticated();\n    }\n    match /activities/{activityId} {\n      allow read: if true;\n      allow create, update, delete: if isAuthenticated();\n    }\n    match /records/{recordId} {\n      allow read: if true;\n      allow create, update, delete: if isAuthenticated();\n    }\n    match /security_audit_logs/{logId} {\n      allow read: if true;\n      allow create: if true;\n      allow update, delete: if false;\n    }\n  }\n}"
+}

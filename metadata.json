@@ -1,0 +1,6 @@
+{
+  "name": "Capacitação Comercial Agro - Dashboard",
+  "description": "Dashboard de monitoramento e acompanhamento de atividades para turmas de capacitação de times comerciais do agronegócio.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
