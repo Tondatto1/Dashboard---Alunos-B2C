@@ -1,7 +1,7 @@
 import React from 'react';
 import { Student, Activity, StudentActivityRecord, Status } from '../types';
 import { StatusBadge } from './StatusBadge';
-import { Edit3, MessageSquare, Calendar } from 'lucide-react';
+import { Edit3, MessageSquare, Calendar, UserPlus, FilePlus } from 'lucide-react';
 
 interface MatrixViewProps {
   students: Student[];
@@ -12,6 +12,8 @@ interface MatrixViewProps {
   onOpenNotes: (studentId: string, activityId: string) => void;
   onEditActivity: (activity: Activity) => void;
   onEditStudent: (student: Student) => void;
+  onOpenAddStudent?: () => void;
+  onOpenAddActivity?: () => void;
 }
 
 export const MatrixView: React.FC<MatrixViewProps> = ({
@@ -23,6 +25,8 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
   onOpenNotes,
   onEditActivity,
   onEditStudent,
+  onOpenAddStudent,
+  onOpenAddActivity,
 }) => {
   const getRecord = (studentId: string, activityId: string) => {
     return records.find((r) => r.studentId === studentId && r.activityId === activityId);
@@ -38,8 +42,50 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
 
   if (students.length === 0 || activities.length === 0) {
     return (
-      <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-500 my-4 font-medium">
-        Nenhum aluno ou atividade encontrada com os filtros selecionados.
+      <div className="bg-white rounded-3xl border border-slate-200/80 p-10 md:p-14 text-center shadow-xs my-4 space-y-5 max-w-2xl mx-auto">
+        <div className="w-16 h-16 bg-indigo-50 border border-indigo-100 rounded-2xl flex items-center justify-center mx-auto text-indigo-600 shadow-2xs">
+          <Calendar className="w-8 h-8" />
+        </div>
+        <div className="space-y-1">
+          <h3 className="text-lg font-bold text-slate-900">
+            {students.length === 0 && activities.length === 0
+              ? 'Painel Pronto e Limpo no Banco de Dados'
+              : students.length === 0
+              ? 'Nenhum Aluno Cadastrado'
+              : 'Nenhuma Atividade Cadastrada'}
+          </h3>
+          <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+            {students.length === 0 && activities.length === 0
+              ? 'Sua base de dados está completamente sincronizada no Firebase. Cadastre novos alunos e atividades para iniciar o acompanhamento.'
+              : students.length === 0
+              ? 'Adicione alunos ao sistema para acompanhar as entregas das atividades.'
+              : 'Crie atividades para que possam ser atribuídas aos alunos nas turmas.'}
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+          {onOpenAddStudent && (
+            <button
+              type="button"
+              onClick={onOpenAddStudent}
+              className="px-4 py-2.5 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center gap-2 shadow-2xs transition-all cursor-pointer"
+            >
+              <UserPlus className="w-4 h-4 text-indigo-600" />
+              <span>Cadastrar Aluno</span>
+            </button>
+          )}
+
+          {onOpenAddActivity && (
+            <button
+              type="button"
+              onClick={onOpenAddActivity}
+              className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-2 shadow-2xs transition-all cursor-pointer"
+            >
+              <FilePlus className="w-4 h-4" />
+              <span>Cadastrar Atividade</span>
+            </button>
+          )}
+        </div>
       </div>
     );
   }

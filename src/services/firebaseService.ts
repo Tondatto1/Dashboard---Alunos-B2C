@@ -9,14 +9,10 @@ import {
   writeBatch,
   query,
   where,
+  getDocFromServer,
 } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db, auth } from '../lib/firebase';
 import { Student, Activity, StudentActivityRecord, AuthorizedUser } from '../types';
-import {
-  INITIAL_STUDENTS,
-  INITIAL_ACTIVITIES,
-  INITIAL_RECORDS,
-} from '../data/initialData';
 import { logSecurityEvent } from './auditService';
 import { sanitizeInput } from '../utils/security';
 
@@ -25,7 +21,19 @@ const ACTIVITIES_COL = 'activities';
 const RECORDS_COL = 'records';
 const USERS_COL = 'authorized_users';
 
-// Real-time Listeners
+// Connection validation
+async function testConnection() {
+  try {
+    await getDocFromServer(doc(db, 'test', 'connection'));
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.error('Verifique a conexão e configuração do Firebase.');
+    }
+  }
+}
+testConnection();
+
+// Real-time Listeners with error handling
 export function subscribeStudents(
   onData: (students: Student[]) => void,
   onError?: (err: Error) => void
@@ -38,7 +46,10 @@ export function subscribeStudents(
       );
       onData(students);
     },
-    onError
+    (err) => {
+      console.error('Erro ao escutar coleção de alunos:', err);
+      if (onError) onError(err);
+    }
   );
 }
 
@@ -54,7 +65,10 @@ export function subscribeActivities(
       );
       onData(activities);
     },
-    onError
+    (err) => {
+      console.error('Erro ao escutar coleção de atividades:', err);
+      if (onError) onError(err);
+    }
   );
 }
 
@@ -70,7 +84,10 @@ export function subscribeRecords(
       );
       onData(records);
     },
-    onError
+    (err) => {
+      console.error('Erro ao escutar coleção de registros:', err);
+      if (onError) onError(err);
+    }
   );
 }
 
@@ -86,37 +103,101 @@ export function subscribeAuthorizedUsers(
       );
       onData(users);
     },
-    onError
+    (err) => {
+      console.error('Erro ao escutar coleção de usuários autorizados:', err);
+      if (onError) onError(err);
+    }
   );
 }
 
-// Data Seeding
-export async function seedInitialDataIfEmpty() {
+// Data Seeding and Cleanup
+export async function cleanupInitialMockDataIfPresent() {
   try {
     const studentSnapshot = await getDocs(collection(db, STUDENTS_COL));
-    if (studentSnapshot.empty) {
+    const mockIds = ['st-1', 'st-2', 'st-3', 'st-4', 'st-5'];
+    const mockNames = ['Ana Souza', 'Bruno Lima', 'Carla Dias', 'Daniel Alves', 'Elena Rost'];
+
+    const mockStudentDocs = studentSnapshot.docs.filter((d) => {
+      const data = d.data();
+      return mockIds.includes(d.id) || mockNames.includes(data.name);
+    });
+
+    const deletedStudentIds = new Set(mockStudentDocs.map((d) => d.id));
+
+    const activitySnapshot = await getDocs(collection(db, ACTIVITIES_COL));
+    const mockActIds = ['act-1', 'act-2', 'act-3'];
+    const mockTitles = [
+      'Atividade 01 - Diagnóstico Inicial',
+      'Atividade 02 - Estudo de Caso Prático',
+      'Atividade 03 - Avaliação Final',
+    ];
+
+    const mockActivityDocs = activitySnapshot.docs.filter((d) => {
+      const data = d.data();
+      return mockActIds.includes(d.id) || mockTitles.includes(data.title);
+    });
+
+    const deletedActivityIds = new Set(mockActivityDocs.map((d) => d.id));
+
+    const recordSnapshot = await getDocs(collection(db, RECORDS_COL));
+    const mockRecordDocs = recordSnapshot.docs.filter((d) => {
+      const data = d.data();
+      return (
+        deletedStudentIds.has(data.studentId) ||
+        deletedActivityIds.has(data.activityId) ||
+        d.id.startsWith('st-1') ||
+        d.id.startsWith('st-2') ||
+        d.id.startsWith('st-3') ||
+        d.id.startsWith('st-4') ||
+        d.id.startsWith('st-5')
+      );
+    });
+
+    if (mockStudentDocs.length > 0 || mockActivityDocs.length > 0 || mockRecordDocs.length > 0) {
       const batch = writeBatch(db);
-
-      INITIAL_STUDENTS.forEach((student) => {
-        const ref = doc(db, STUDENTS_COL, student.id);
-        batch.set(ref, student);
-      });
-
-      INITIAL_ACTIVITIES.forEach((activity) => {
-        const ref = doc(db, ACTIVITIES_COL, activity.id);
-        batch.set(ref, activity);
-      });
-
-      INITIAL_RECORDS.forEach((record) => {
-        const ref = doc(db, RECORDS_COL, record.id);
-        batch.set(ref, record);
-      });
+      mockStudentDocs.forEach((d) => batch.delete(d.ref));
+      mockActivityDocs.forEach((d) => batch.delete(d.ref));
+      mockRecordDocs.forEach((d) => batch.delete(d.ref));
 
       await batch.commit();
-      console.log('Initial data successfully seeded to Firebase Firestore');
+      console.log('Dados fictícios/demonstração removidos do Firestore com sucesso.');
     }
+  } catch (err) {
+    console.warn('Aviso na limpeza de dados mock do Firestore:', err);
+  }
+}
 
-    // Seed default admin accounts
+export async function clearAllDashboardDataFromFirebase(actorEmail = 'system') {
+  try {
+    const studentSnapshot = await getDocs(collection(db, STUDENTS_COL));
+    const activitySnapshot = await getDocs(collection(db, ACTIVITIES_COL));
+    const recordSnapshot = await getDocs(collection(db, RECORDS_COL));
+
+    const batch = writeBatch(db);
+
+    studentSnapshot.docs.forEach((d) => batch.delete(d.ref));
+    activitySnapshot.docs.forEach((d) => batch.delete(d.ref));
+    recordSnapshot.docs.forEach((d) => batch.delete(d.ref));
+
+    await batch.commit();
+
+    await logSecurityEvent(
+      'DATA_RESET',
+      actorEmail,
+      'Esvaziamento completo dos dados do painel realizado.',
+      'warning'
+    );
+  } catch (err) {
+    console.error('Erro ao esvaziar dados do dashboard no Firestore:', err);
+  }
+}
+
+export async function seedInitialDataIfEmpty() {
+  try {
+    // Ensure all demo mock data is wiped from Firestore
+    await cleanupInitialMockDataIfPresent();
+
+    // Seed default admin accounts if missing
     const ceruttiEmail = 'cerutticonsultoria@gmail.com';
     const ceruttiDoc = await getDoc(doc(db, USERS_COL, ceruttiEmail));
 
@@ -169,7 +250,7 @@ export async function seedInitialDataIfEmpty() {
       await batch.commit();
     }
   } catch (err) {
-    console.error('Error seeding initial data to Firestore:', err);
+    console.error('Error seeding initial admins in Firestore:', err);
   }
 }
 

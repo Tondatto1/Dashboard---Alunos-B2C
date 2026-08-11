@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Student, Activity, StudentActivityRecord, Status, ViewMode, AuthorizedUser } from './types';
-import { INITIAL_STUDENTS, INITIAL_ACTIVITIES, INITIAL_RECORDS } from './data/initialData';
 import {
   subscribeStudents,
   subscribeActivities,
   subscribeRecords,
   subscribeAuthorizedUsers,
   seedInitialDataIfEmpty,
+  clearAllDashboardDataFromFirebase,
   saveStudentToFirebase,
   deleteStudentFromFirebase,
   saveActivityToFirebase,
@@ -276,19 +276,10 @@ export function App() {
       .forEach((r) => deleteRecordFromFirebase(r.id));
   };
 
-  // Reset Data to Initial Demo State in Firebase
+  // Clear Dashboard Data in Firebase
   const handleResetData = async () => {
-    if (window.confirm('Deseja restaurar os dados iniciais no banco de dados Firebase?')) {
-      for (const st of students) {
-        await deleteStudentFromFirebase(st.id);
-      }
-      for (const act of activities) {
-        await deleteActivityFromFirebase(act.id);
-      }
-      for (const rec of records) {
-        await deleteRecordFromFirebase(rec.id);
-      }
-      await seedInitialDataIfEmpty();
+    if (window.confirm('Deseja esvaziar todos os alunos, atividades e registros do banco de dados? Esta ação limpa o painel mantendo a sincronização ativa.')) {
+      await clearAllDashboardDataFromFirebase(currentUser?.email || 'admin');
     }
   };
 
@@ -464,6 +455,8 @@ export function App() {
             onOpenNotes={(studentId, activityId) => setActiveNoteRecord({ studentId, activityId })}
             onEditActivity={(act) => setEditingActivity(act)}
             onEditStudent={(st) => setEditingStudent(st)}
+            onOpenAddStudent={() => setIsAddStudentOpen(true)}
+            onOpenAddActivity={() => setIsAddActivityOpen(true)}
           />
         )}
 
@@ -477,6 +470,7 @@ export function App() {
             onOpenNotes={(studentId, activityId) => setActiveNoteRecord({ studentId, activityId })}
             onEditStudent={(st) => setEditingStudent(st)}
             onEditActivity={(act) => setEditingActivity(act)}
+            onOpenAddStudent={() => setIsAddStudentOpen(true)}
           />
         )}
 
@@ -490,6 +484,7 @@ export function App() {
             onOpenNotes={(studentId, activityId) => setActiveNoteRecord({ studentId, activityId })}
             onEditActivity={(act) => setEditingActivity(act)}
             onEditStudent={(st) => setEditingStudent(st)}
+            onOpenAddActivity={() => setIsAddActivityOpen(true)}
           />
         )}
 

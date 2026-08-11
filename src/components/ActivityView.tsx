@@ -1,7 +1,7 @@
 import React from 'react';
 import { Student, Activity, StudentActivityRecord, Status } from '../types';
 import { StatusBadge } from './StatusBadge';
-import { Edit3, MessageSquare, Calendar, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
+import { Edit3, MessageSquare, Calendar, CheckCircle2, Clock, AlertCircle, FilePlus, BookOpen } from 'lucide-react';
 
 interface ActivityViewProps {
   students: Student[];
@@ -12,6 +12,7 @@ interface ActivityViewProps {
   onOpenNotes: (studentId: string, activityId: string) => void;
   onEditActivity: (activity: Activity) => void;
   onEditStudent: (student: Student) => void;
+  onOpenAddActivity?: () => void;
 }
 
 export const ActivityView: React.FC<ActivityViewProps> = ({
@@ -22,11 +23,30 @@ export const ActivityView: React.FC<ActivityViewProps> = ({
   onToggleStatus,
   onOpenNotes,
   onEditActivity,
+  onOpenAddActivity,
 }) => {
   if (activities.length === 0) {
     return (
-      <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-500 my-4 font-medium">
-        Nenhuma atividade cadastrada.
+      <div className="bg-white rounded-3xl border border-slate-200/80 p-10 md:p-14 text-center shadow-xs my-4 space-y-4 max-w-xl mx-auto">
+        <div className="w-14 h-14 bg-indigo-50 border border-indigo-100 rounded-2xl flex items-center justify-center mx-auto text-indigo-600 shadow-2xs">
+          <BookOpen className="w-7 h-7" />
+        </div>
+        <div className="space-y-1">
+          <h3 className="text-base font-bold text-slate-900">Nenhuma Atividade Cadastrada</h3>
+          <p className="text-xs text-slate-500 max-w-sm mx-auto">
+            Não há atividades nesta visão ou filtro. Cadastre a primeira atividade da formação para iniciar.
+          </p>
+        </div>
+        {onOpenAddActivity && (
+          <button
+            type="button"
+            onClick={onOpenAddActivity}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-2xs transition-all inline-flex items-center gap-2 cursor-pointer mt-2"
+          >
+            <FilePlus className="w-4 h-4" />
+            <span>Cadastrar Atividade</span>
+          </button>
+        )}
       </div>
     );
   }

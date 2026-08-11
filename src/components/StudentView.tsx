@@ -1,7 +1,7 @@
 import React from 'react';
 import { Student, Activity, StudentActivityRecord, Status } from '../types';
 import { StatusBadge } from './StatusBadge';
-import { Edit3, MessageSquare, Calendar } from 'lucide-react';
+import { Edit3, MessageSquare, Calendar, Users, UserPlus } from 'lucide-react';
 
 interface StudentViewProps {
   students: Student[];
@@ -12,6 +12,7 @@ interface StudentViewProps {
   onOpenNotes: (studentId: string, activityId: string) => void;
   onEditStudent: (student: Student) => void;
   onEditActivity: (activity: Activity) => void;
+  onOpenAddStudent?: () => void;
 }
 
 export const StudentView: React.FC<StudentViewProps> = ({
@@ -22,11 +23,30 @@ export const StudentView: React.FC<StudentViewProps> = ({
   onToggleStatus,
   onOpenNotes,
   onEditStudent,
+  onOpenAddStudent,
 }) => {
   if (students.length === 0) {
     return (
-      <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-500 my-4 font-medium">
-        Nenhum aluno encontrado.
+      <div className="bg-white rounded-3xl border border-slate-200/80 p-10 md:p-14 text-center shadow-xs my-4 space-y-4 max-w-xl mx-auto">
+        <div className="w-14 h-14 bg-indigo-50 border border-indigo-100 rounded-2xl flex items-center justify-center mx-auto text-indigo-600 shadow-2xs">
+          <Users className="w-7 h-7" />
+        </div>
+        <div className="space-y-1">
+          <h3 className="text-base font-bold text-slate-900">Nenhum Aluno Encontrado</h3>
+          <p className="text-xs text-slate-500 max-w-sm mx-auto">
+            Não há alunos cadastrados nesta visão ou filtro. Cadastre seu primeiro aluno para iniciar.
+          </p>
+        </div>
+        {onOpenAddStudent && (
+          <button
+            type="button"
+            onClick={onOpenAddStudent}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-2xs transition-all inline-flex items-center gap-2 cursor-pointer mt-2"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>Cadastrar Aluno</span>
+          </button>
+        )}
       </div>
     );
   }
