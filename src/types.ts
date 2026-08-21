@@ -1,11 +1,19 @@
 export type Status = 'pendente' | 'em_progresso' | 'concluido';
 
+export interface Turma {
+  id: string;
+  name: string;
+  description?: string;
+  createdAt: string;
+}
+
 export interface Student {
   id: string;
   name: string;
   group: string; // Turma / Equipe
   avatarColor: string;
   role?: string;
+  createdAt?: string;
 }
 
 export interface Activity {
@@ -15,6 +23,8 @@ export interface Activity {
   description?: string;
   assignedStudentIds?: string[];
   targetGroup?: string; // Turma específica ou 'ALL' / undefined para todas
+  subject?: string;
+  createdAt?: string;
 }
 
 export interface StudentActivityRecord {
@@ -45,6 +55,16 @@ export interface AuthorizedUser {
   invitedBy?: string;
 }
 
+export interface UserPreference {
+  id: string; // doc id (lowercased email)
+  email: string;
+  selectedGroup: string;
+  selectedStatus: Status | 'todos';
+  viewMode: ViewMode;
+  search: string;
+  updatedAt: string;
+}
+
 export interface SecurityAuditLog {
   id: string;
   timestamp: string;
@@ -57,8 +77,11 @@ export interface SecurityAuditLog {
     | 'ACTIVITY_MUTATED'
     | 'RECORD_MUTATED'
     | 'USER_MUTATED'
+    | 'GROUP_MUTATED'
+    | 'PREFERENCE_MUTATED'
     | 'DATA_RESET';
   details: string;
   severity: 'info' | 'warning' | 'critical';
   ipOrAgent?: string;
 }
+

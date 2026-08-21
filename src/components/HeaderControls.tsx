@@ -29,11 +29,13 @@ interface HeaderControlsProps {
   onViewModeChange: (mode: ViewMode) => void;
   onOpenAddStudent: () => void;
   onOpenAddActivity: () => void;
+  onOpenManageGroups: () => void;
   onOpenReport: () => void;
   onOpenUserAccessManager: () => void;
   onOpenSecurityAudit: () => void;
   onLogout: () => void;
   onResetData: () => void;
+  isSaving?: boolean;
 }
 
 export const HeaderControls: React.FC<HeaderControlsProps> = ({
@@ -49,11 +51,13 @@ export const HeaderControls: React.FC<HeaderControlsProps> = ({
   onViewModeChange,
   onOpenAddStudent,
   onOpenAddActivity,
+  onOpenManageGroups,
   onOpenReport,
   onOpenUserAccessManager,
   onOpenSecurityAudit,
   onLogout,
   onResetData,
+  isSaving = false,
 }) => {
   const isAdmin = currentUser?.role === 'admin';
 
@@ -67,11 +71,17 @@ export const HeaderControls: React.FC<HeaderControlsProps> = ({
               🎓
             </div>
             <div>
-              <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-                Acompanhamento de Atividades da Formação
-              </h1>
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h1 className="text-xl font-bold text-slate-900 tracking-tight">
+                  Acompanhamento de Atividades da Formação
+                </h1>
+                <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200/80 text-[11px] font-semibold text-emerald-800">
+                  <span className={`w-2 h-2 rounded-full ${isSaving ? 'bg-amber-500 animate-ping' : 'bg-emerald-500'}`} />
+                  <span>{isSaving ? 'Gravando no Firebase...' : 'Firebase Conectado & Sincronizado'}</span>
+                </div>
+              </div>
               <p className="text-xs text-slate-500 font-medium">
-                Gestão e monitoramento individual e por turma das entregas dos alunos.
+                Gestão e monitoramento individual e por turma das entregas dos alunos com persistência em nuvem em tempo real.
               </p>
             </div>
           </div>
@@ -132,6 +142,19 @@ export const HeaderControls: React.FC<HeaderControlsProps> = ({
             </button>
           )}
 
+          {/* Turmas Management Button (Only for Admin) */}
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={onOpenManageGroups}
+              id="btn-manage-groups"
+              className="px-3 py-2 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
+              title="Criar, renomear ou remover turmas no Firebase"
+            >
+              <Users className="w-4 h-4 text-indigo-600" />
+              <span>Turmas</span>
+            </button>
+          )}
 
           {/* Add Student & Add Activity buttons (Only for Admin) */}
           {isAdmin && (
@@ -172,8 +195,8 @@ export const HeaderControls: React.FC<HeaderControlsProps> = ({
             <button
               type="button"
               onClick={onResetData}
-              title="Restaurar dados iniciais"
-              className="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+              title="Esvaziar e resetar dados do banco de dados"
+              className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-slate-100 transition-colors cursor-pointer"
             >
               <RotateCcw className="w-4 h-4" />
             </button>

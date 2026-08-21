@@ -160,13 +160,12 @@ export const ActivityView: React.FC<ActivityViewProps> = ({
                       </div>
 
                       <div className="flex items-center gap-1.5 shrink-0">
-                        <button
-                          type="button"
+                        <StatusBadge
+                          status={status}
+                          interactive
+                          size="sm"
                           onClick={() => onToggleStatus(student.id, activity.id)}
-                          className="cursor-pointer focus:outline-hidden"
-                        >
-                          <StatusBadge status={status} interactive size="sm" />
-                        </button>
+                        />
 
                         <button
                           type="button"

@@ -188,14 +188,12 @@ export const MatrixView: React.FC<MatrixViewProps> = ({
                         }`}
                       >
                         <div className="flex flex-col items-center justify-center gap-1">
-                          <button
-                            type="button"
+                          <StatusBadge
+                            status={currentStatus}
+                            interactive
+                            size="sm"
                             onClick={() => onToggleStatus(student.id, activity.id)}
-                            className="group transition-transform active:scale-95 cursor-pointer focus:outline-hidden"
-                            title="Clique para alternar o status"
-                          >
-                            <StatusBadge status={currentStatus} interactive size="sm" />
-                          </button>
+                          />
 
                           {/* Action for Note / Comments */}
                           <button

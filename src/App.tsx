@@ -1,11 +1,22 @@
-import React, { useState, useEffect } from 'react';
-import { Student, Activity, StudentActivityRecord, Status, ViewMode, AuthorizedUser } from './types';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  Student,
+  Activity,
+  StudentActivityRecord,
+  Status,
+  ViewMode,
+  AuthorizedUser,
+  Turma,
+  UserPreference,
+} from './types';
 import {
   subscribeStudents,
   subscribeActivities,
   subscribeRecords,
+  subscribeTurmas,
   subscribeAuthorizedUsers,
-  seedInitialDataIfEmpty,
+  subscribeUserPreferences,
+  ensureMasterAdminExists,
   clearAllDashboardDataFromFirebase,
   saveStudentToFirebase,
   deleteStudentFromFirebase,
@@ -13,8 +24,12 @@ import {
   deleteActivityFromFirebase,
   saveRecordToFirebase,
   deleteRecordFromFirebase,
+  saveTurmaToFirebase,
+  renameTurmaInFirebase,
+  deleteTurmaFromFirebase,
   saveAuthorizedUserToFirebase,
   deleteAuthorizedUserFromFirebase,
+  saveUserPreferenceToFirebase,
 } from './services/firebaseService';
 
 import { HeaderControls } from './components/HeaderControls';
@@ -27,6 +42,7 @@ import { AddStudentModal } from './components/AddStudentModal';
 import { AddActivityModal } from './components/AddActivityModal';
 import { EditStudentModal } from './components/EditStudentModal';
 import { EditActivityModal } from './components/EditActivityModal';
+import { ManageGroupsModal } from './components/ManageGroupsModal';
 import { NoteModal } from './components/NoteModal';
 import { ExportReportModal } from './components/ExportReportModal';
 import { LoginModal } from './components/LoginModal';
@@ -43,21 +59,25 @@ export function App() {
     return saved ? JSON.parse(saved) : null;
   });
 
-  // Primary Data State synced with Firestore
+  // Primary Data State synced with Firestore Real-time
   const [students, setStudents] = useState<Student[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [records, setRecords] = useState<StudentActivityRecord[]>([]);
+  const [turmas, setTurmas] = useState<Turma[]>([]);
   const [isFirebaseLoading, setIsFirebaseLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Filters & View Mode State
   const [search, setSearch] = useState('');
   const [selectedGroup, setSelectedGroup] = useState('ALL');
   const [selectedStatus, setSelectedStatus] = useState<Status | 'todos'>('todos');
   const [viewMode, setViewMode] = useState<ViewMode>('matrix');
+  const isPreferencesLoaded = useRef(false);
 
   // Modals
   const [isAddStudentOpen, setIsAddStudentOpen] = useState(false);
   const [isAddActivityOpen, setIsAddActivityOpen] = useState(false);
+  const [isManageGroupsOpen, setIsManageGroupsOpen] = useState(false);
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [isUserAccessManagerOpen, setIsUserAccessManagerOpen] = useState(false);
   const [isSecurityAuditOpen, setIsSecurityAuditOpen] = useState(false);
@@ -77,10 +97,11 @@ export function App() {
     let unsubStudents: (() => void) | null = null;
     let unsubActivities: (() => void) | null = null;
     let unsubRecords: (() => void) | null = null;
+    let unsubTurmas: (() => void) | null = null;
     let unsubUsers: (() => void) | null = null;
 
     async function initFirebase() {
-      await seedInitialDataIfEmpty();
+      await ensureMasterAdminExists();
 
       unsubStudents = subscribeStudents((data) => {
         setStudents(data);
@@ -95,6 +116,10 @@ export function App() {
         setRecords(data);
       });
 
+      unsubTurmas = subscribeTurmas((data) => {
+        setTurmas(data);
+      });
+
       unsubUsers = subscribeAuthorizedUsers((data) => {
         setAuthorizedUsers(data);
       });
@@ -106,9 +131,49 @@ export function App() {
       if (unsubStudents) unsubStudents();
       if (unsubActivities) unsubActivities();
       if (unsubRecords) unsubRecords();
+      if (unsubTurmas) unsubTurmas();
       if (unsubUsers) unsubUsers();
     };
   }, []);
+
+  // Subscribe to user preferences in Firestore when user logs in
+  useEffect(() => {
+    if (!currentUser?.email) return;
+
+    const unsubPref = subscribeUserPreferences(currentUser.email, (pref) => {
+      if (pref && !isPreferencesLoaded.current) {
+        if (pref.selectedGroup) setSelectedGroup(pref.selectedGroup);
+        if (pref.selectedStatus) setSelectedStatus(pref.selectedStatus);
+        if (pref.viewMode) setViewMode(pref.viewMode);
+        if (pref.search !== undefined) setSearch(pref.search);
+        isPreferencesLoaded.current = true;
+      }
+    });
+
+    return () => {
+      unsubPref();
+    };
+  }, [currentUser?.email]);
+
+  // Sync preference changes to Firestore (debounced for search)
+  useEffect(() => {
+    if (!currentUser?.email || !isPreferencesLoaded.current) return;
+
+    const timeout = setTimeout(() => {
+      const prefData: UserPreference = {
+        id: currentUser.email.toLowerCase(),
+        email: currentUser.email.toLowerCase(),
+        selectedGroup,
+        selectedStatus,
+        viewMode,
+        search,
+        updatedAt: new Date().toISOString(),
+      };
+      saveUserPreferenceToFirebase(prefData, currentUser.email);
+    }, 600);
+
+    return () => clearTimeout(timeout);
+  }, [selectedGroup, selectedStatus, viewMode, search, currentUser?.email]);
 
   // Update session storage when logged user changes
   useEffect(() => {
@@ -116,10 +181,11 @@ export function App() {
       sessionStorage.setItem(USER_SESSION_KEY, JSON.stringify(currentUser));
     } else {
       sessionStorage.removeItem(USER_SESSION_KEY);
+      isPreferencesLoaded.current = false;
     }
   }, [currentUser]);
 
-  // Keep currentUser synced if ADM updates their permissions
+  // Keep currentUser in sync if ADM updates permissions
   useEffect(() => {
     if (currentUser && authorizedUsers.length > 0) {
       const updated = authorizedUsers.find(
@@ -141,15 +207,37 @@ export function App() {
 
   // User Permission Management Handlers (Admin Only)
   const handleSaveUserPermission = async (user: AuthorizedUser) => {
-    await saveAuthorizedUserToFirebase(user);
+    setIsSaving(true);
+    try {
+      await saveAuthorizedUserToFirebase(
+        user,
+        currentUser?.email || 'admin',
+        currentUser?.name || 'Administrador'
+      );
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleDeleteUserPermission = async (userId: string) => {
-    await deleteAuthorizedUserFromFirebase(userId);
+    setIsSaving(true);
+    try {
+      await deleteAuthorizedUserFromFirebase(
+        userId,
+        currentUser?.email || 'admin',
+        currentUser?.name || 'Administrador'
+      );
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  // Derived Unique Groups/Turmas for Filter Dropdown
-  const groups = Array.from(new Set(students.map((s) => s.group))).sort();
+  // Derived Unified Groups List from Firestore `turmas` collection + students
+  const turmaNames = turmas.map((t) => t.name);
+  const studentGroupNames = students.map((s) => s.group);
+  const groups = Array.from(
+    new Set([...turmaNames, ...studentGroupNames].filter(Boolean))
+  ).sort();
 
   // Scope Enforcement for Viewer Users
   let scopeRestrictedStudents = students;
@@ -169,7 +257,7 @@ export function App() {
   }
 
   // Handlers for Activity Status Toggle
-  const handleToggleStatus = (studentId: string, activityId: string) => {
+  const handleToggleStatus = async (studentId: string, activityId: string) => {
     const existing = records.find(
       (r) => r.studentId === studentId && r.activityId === activityId
     );
@@ -182,27 +270,42 @@ export function App() {
 
     const now = new Date().toISOString().split('T')[0];
 
-    if (existing) {
-      const updatedRecord: StudentActivityRecord = {
-        ...existing,
-        status: statusCycle[existing.status],
-        updatedAt: now,
-      };
-      saveRecordToFirebase(updatedRecord);
-    } else {
-      const newRecord: StudentActivityRecord = {
-        id: `${studentId}_${activityId}`,
-        studentId,
-        activityId,
-        status: 'em_progresso',
-        updatedAt: now,
-      };
-      saveRecordToFirebase(newRecord);
+    setIsSaving(true);
+    try {
+      if (existing) {
+        const updatedRecord: StudentActivityRecord = {
+          ...existing,
+          status: statusCycle[existing.status],
+          updatedAt: now,
+        };
+        await saveRecordToFirebase(
+          updatedRecord,
+          currentUser?.email || 'admin',
+          currentUser?.name || 'Administrador'
+        );
+      } else {
+        const newRecord: StudentActivityRecord = {
+          id: `${studentId}_${activityId}`,
+          studentId,
+          activityId,
+          status: 'em_progresso',
+          updatedAt: now,
+        };
+        await saveRecordToFirebase(
+          newRecord,
+          currentUser?.email || 'admin',
+          currentUser?.name || 'Administrador'
+        );
+      }
+    } catch (err) {
+      console.error('Error toggling status in Firebase:', err);
+    } finally {
+      setIsSaving(false);
     }
   };
 
   // Handlers for Notes
-  const handleSaveNote = (
+  const handleSaveNote = async (
     studentId: string,
     activityId: string,
     noteText: string,
@@ -213,73 +316,212 @@ export function App() {
     );
     const now = new Date().toISOString().split('T')[0];
 
-    if (existing) {
-      const updatedRecord: StudentActivityRecord = {
-        ...existing,
-        notes: noteText,
-        status: newStatus || existing.status,
-        updatedAt: now,
-      };
-      saveRecordToFirebase(updatedRecord);
-    } else {
-      const newRecord: StudentActivityRecord = {
-        id: `${studentId}_${activityId}`,
-        studentId,
-        activityId,
-        status: newStatus || 'pendente',
-        updatedAt: now,
-        notes: noteText,
-      };
-      saveRecordToFirebase(newRecord);
+    setIsSaving(true);
+    try {
+      if (existing) {
+        const updatedRecord: StudentActivityRecord = {
+          ...existing,
+          notes: noteText,
+          status: newStatus || existing.status,
+          updatedAt: now,
+        };
+        await saveRecordToFirebase(
+          updatedRecord,
+          currentUser?.email || 'admin',
+          currentUser?.name || 'Administrador'
+        );
+      } else {
+        const newRecord: StudentActivityRecord = {
+          id: `${studentId}_${activityId}`,
+          studentId,
+          activityId,
+          status: newStatus || 'pendente',
+          updatedAt: now,
+          notes: noteText,
+        };
+        await saveRecordToFirebase(
+          newRecord,
+          currentUser?.email || 'admin',
+          currentUser?.name || 'Administrador'
+        );
+      }
+    } catch (err) {
+      console.error('Error saving note in Firebase:', err);
+    } finally {
+      setIsSaving(false);
     }
   };
 
   // CRUD Student
-  const handleAddStudent = (newStudentData: Omit<Student, 'id'>) => {
+  const handleAddStudent = async (newStudentData: Omit<Student, 'id'>) => {
     const newStudent: Student = {
       ...newStudentData,
       id: `st-${Date.now()}`,
+      createdAt: new Date().toISOString().split('T')[0],
     };
-    saveStudentToFirebase(newStudent);
+    setIsSaving(true);
+    try {
+      await saveStudentToFirebase(
+        newStudent,
+        currentUser?.email || 'admin',
+        currentUser?.name || 'Administrador'
+      );
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleSaveStudent = (updatedStudent: Student) => {
-    saveStudentToFirebase(updatedStudent);
+  const handleSaveStudent = async (updatedStudent: Student) => {
+    setIsSaving(true);
+    try {
+      await saveStudentToFirebase(
+        updatedStudent,
+        currentUser?.email || 'admin',
+        currentUser?.name || 'Administrador'
+      );
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleDeleteStudent = (studentId: string) => {
-    deleteStudentFromFirebase(studentId);
-    // Also cleanup student records
-    records
-      .filter((r) => r.studentId === studentId)
-      .forEach((r) => deleteRecordFromFirebase(r.id));
+  const handleDeleteStudent = async (studentId: string) => {
+    setIsSaving(true);
+    try {
+      await deleteStudentFromFirebase(
+        studentId,
+        currentUser?.email || 'admin',
+        currentUser?.name || 'Administrador'
+      );
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // CRUD Activity
-  const handleAddActivity = (newActivityData: Omit<Activity, 'id'>) => {
+  const handleAddActivity = async (newActivityData: Omit<Activity, 'id'>) => {
     const newActivity: Activity = {
       ...newActivityData,
       id: `act-${Date.now()}`,
+      createdAt: new Date().toISOString().split('T')[0],
     };
-    saveActivityToFirebase(newActivity);
+    setIsSaving(true);
+    try {
+      await saveActivityToFirebase(
+        newActivity,
+        currentUser?.email || 'admin',
+        currentUser?.name || 'Administrador'
+      );
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleSaveActivity = (updatedActivity: Activity) => {
-    saveActivityToFirebase(updatedActivity);
+  const handleSaveActivity = async (updatedActivity: Activity) => {
+    setIsSaving(true);
+    try {
+      await saveActivityToFirebase(
+        updatedActivity,
+        currentUser?.email || 'admin',
+        currentUser?.name || 'Administrador'
+      );
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleDeleteActivity = (activityId: string) => {
-    deleteActivityFromFirebase(activityId);
-    // Also cleanup activity records
-    records
-      .filter((r) => r.activityId === activityId)
-      .forEach((r) => deleteRecordFromFirebase(r.id));
+  const handleDeleteActivity = async (activityId: string) => {
+    setIsSaving(true);
+    try {
+      await deleteActivityFromFirebase(
+        activityId,
+        currentUser?.email || 'admin',
+        currentUser?.name || 'Administrador'
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // CRUD Turmas / Groups
+  const handleSaveTurma = async (name: string, description?: string) => {
+    const newTurma: Turma = {
+      id: `turma-${Date.now()}`,
+      name,
+      description,
+      createdAt: new Date().toISOString().split('T')[0],
+    };
+    setIsSaving(true);
+    try {
+      await saveTurmaToFirebase(
+        newTurma,
+        currentUser?.email || 'admin',
+        currentUser?.name || 'Administrador'
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleRenameTurma = async (
+    turmaId: string,
+    oldName: string,
+    newName: string
+  ) => {
+    setIsSaving(true);
+    try {
+      await renameTurmaInFirebase(
+        turmaId,
+        oldName,
+        newName,
+        currentUser?.email || 'admin',
+        currentUser?.name || 'Administrador'
+      );
+      if (selectedGroup === oldName) {
+        setSelectedGroup(newName);
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteTurma = async (turmaId: string, name: string) => {
+    setIsSaving(true);
+    try {
+      await deleteTurmaFromFirebase(
+        turmaId,
+        name,
+        currentUser?.email || 'admin',
+        currentUser?.name || 'Administrador'
+      );
+      if (selectedGroup === name) {
+        setSelectedGroup('ALL');
+      }
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // Clear Dashboard Data in Firebase
   const handleResetData = async () => {
-    if (window.confirm('Deseja esvaziar todos os alunos, atividades e registros do banco de dados? Esta ação limpa o painel mantendo a sincronização ativa.')) {
-      await clearAllDashboardDataFromFirebase(currentUser?.email || 'admin');
+    if (
+      window.confirm(
+        'Deseja esvaziar todos os alunos, atividades, turmas e registros do banco de dados? Esta ação limpa o painel mantendo a sincronização ativa.'
+      )
+    ) {
+      setIsSaving(true);
+      try {
+        await clearAllDashboardDataFromFirebase(
+          currentUser?.email || 'admin',
+          currentUser?.name || 'Administrador'
+        );
+        setSelectedGroup('ALL');
+        setSelectedStatus('todos');
+        setSearch('');
+      } catch (err: any) {
+        alert('Erro ao esvaziar banco de dados: ' + (err.message || 'Erro inesperado'));
+      } finally {
+        setIsSaving(false);
+      }
     }
   };
 
@@ -293,7 +535,7 @@ export function App() {
 
   // Unified Group, Search and Status Filtering Logic
   const groupFilteredStudents = scopeRestrictedStudents.filter(
-    (s) => selectedGroup === 'ALL' || s.group === selectedGroup
+    (s) => selectedGroup === 'ALL' || s.group.toLowerCase() === selectedGroup.toLowerCase()
   );
 
   const groupFilteredActivities = activities.filter(
@@ -301,7 +543,7 @@ export function App() {
       selectedGroup === 'ALL' ||
       !a.targetGroup ||
       a.targetGroup === 'ALL' ||
-      a.targetGroup === selectedGroup
+      a.targetGroup.toLowerCase() === selectedGroup.toLowerCase()
   );
 
   const cleanSearch = search.trim().toLowerCase();
@@ -391,9 +633,7 @@ export function App() {
   return (
     <div className="min-h-screen bg-slate-100 text-slate-800 p-4 sm:p-6 md:p-8 font-sans selection:bg-indigo-100 selection:text-indigo-900">
       {/* Login Modal Overlay if not authenticated */}
-      {!currentUser && (
-        <LoginModal onLoginSuccess={handleLoginSuccess} />
-      )}
+      {!currentUser && <LoginModal onLoginSuccess={handleLoginSuccess} />}
 
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header and Filter Controls */}
@@ -410,13 +650,14 @@ export function App() {
           onViewModeChange={setViewMode}
           onOpenAddStudent={() => setIsAddStudentOpen(true)}
           onOpenAddActivity={() => setIsAddActivityOpen(true)}
+          onOpenManageGroups={() => setIsManageGroupsOpen(true)}
           onOpenReport={() => setIsReportOpen(true)}
           onOpenUserAccessManager={() => setIsUserAccessManagerOpen(true)}
           onOpenSecurityAudit={() => setIsSecurityAuditOpen(true)}
           onLogout={handleLogout}
           onResetData={handleResetData}
+          isSaving={isSaving}
         />
-
 
         {/* Scope Banner Notice for Viewers */}
         {currentUser?.role === 'viewer' && (
@@ -452,7 +693,9 @@ export function App() {
             records={records}
             selectedStatus={selectedStatus}
             onToggleStatus={handleToggleStatus}
-            onOpenNotes={(studentId, activityId) => setActiveNoteRecord({ studentId, activityId })}
+            onOpenNotes={(studentId, activityId) =>
+              setActiveNoteRecord({ studentId, activityId })
+            }
             onEditActivity={(act) => setEditingActivity(act)}
             onEditStudent={(st) => setEditingStudent(st)}
             onOpenAddStudent={() => setIsAddStudentOpen(true)}
@@ -467,7 +710,9 @@ export function App() {
             records={records}
             selectedStatus={selectedStatus}
             onToggleStatus={handleToggleStatus}
-            onOpenNotes={(studentId, activityId) => setActiveNoteRecord({ studentId, activityId })}
+            onOpenNotes={(studentId, activityId) =>
+              setActiveNoteRecord({ studentId, activityId })
+            }
             onEditStudent={(st) => setEditingStudent(st)}
             onEditActivity={(act) => setEditingActivity(act)}
             onOpenAddStudent={() => setIsAddStudentOpen(true)}
@@ -481,7 +726,9 @@ export function App() {
             records={records}
             selectedStatus={selectedStatus}
             onToggleStatus={handleToggleStatus}
-            onOpenNotes={(studentId, activityId) => setActiveNoteRecord({ studentId, activityId })}
+            onOpenNotes={(studentId, activityId) =>
+              setActiveNoteRecord({ studentId, activityId })
+            }
             onEditActivity={(act) => setEditingActivity(act)}
             onEditStudent={(st) => setEditingStudent(st)}
             onOpenAddActivity={() => setIsAddActivityOpen(true)}
@@ -489,6 +736,17 @@ export function App() {
         )}
 
         {/* Modals */}
+        <ManageGroupsModal
+          isOpen={isManageGroupsOpen}
+          onClose={() => setIsManageGroupsOpen(false)}
+          turmas={turmas}
+          students={students}
+          activities={activities}
+          onSaveTurma={handleSaveTurma}
+          onRenameTurma={handleRenameTurma}
+          onDeleteTurma={handleDeleteTurma}
+        />
+
         <UserAccessManagerModal
           isOpen={isUserAccessManagerOpen}
           onClose={() => setIsUserAccessManagerOpen(false)}
@@ -571,4 +829,3 @@ export function App() {
 }
 
 export default App;
-

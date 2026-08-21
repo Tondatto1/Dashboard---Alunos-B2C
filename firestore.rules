@@ -7,6 +7,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Turmas / Groups
+    match /turmas/{turmaId} {
+      allow read, write: if true;
+    }
+
     // Students
     match /students/{studentId} {
       allow read, write: if true;
@@ -22,10 +27,16 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // User Preferences / Filters State
+    match /user_preferences/{prefId} {
+      allow read, write: if true;
+    }
+
     // Security Audit Trail
     match /security_audit_logs/{logId} {
       allow read, write: if true;
     }
   }
 }
+
 

@@ -151,13 +151,12 @@ export const StudentView: React.FC<StudentViewProps> = ({
                       </div>
 
                       <div className="flex flex-col items-end gap-1 shrink-0">
-                        <button
-                          type="button"
+                        <StatusBadge
+                          status={status}
+                          interactive
+                          size="sm"
                           onClick={() => onToggleStatus(student.id, activity.id)}
-                          className="cursor-pointer focus:outline-hidden"
-                        >
-                          <StatusBadge status={status} interactive size="sm" />
-                        </button>
+                        />
 
                         <button
                           type="button"

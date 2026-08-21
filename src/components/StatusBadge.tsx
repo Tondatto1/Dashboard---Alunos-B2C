@@ -66,19 +66,33 @@ export function StatusBadge({
     lg: 'w-4.5 h-4.5',
   }[size];
 
+  const baseClasses = `
+    inline-flex items-center justify-center rounded-full border shadow-2xs transition-all duration-150 select-none
+    ${config.bg} ${config.text} ${config.border}
+    ${interactive ? `${config.hover} cursor-pointer active:scale-95 hover:shadow-xs focus:outline-hidden` : 'cursor-default'}
+    ${sizeClasses}
+  `;
+
+  if (!interactive) {
+    return (
+      <span
+        id={`status-badge-${status}`}
+        className={baseClasses}
+        title={config.label}
+      >
+        <Icon className={`${iconSizes} shrink-0 opacity-90`} />
+        {showLabel && <span className="whitespace-nowrap tracking-tight">{config.label}</span>}
+      </span>
+    );
+  }
+
   return (
     <button
       type="button"
       onClick={onClick}
-      disabled={!interactive}
       id={`status-badge-${status}`}
-      className={`
-        inline-flex items-center justify-center rounded-full border shadow-2xs transition-all duration-150 select-none
-        ${config.bg} ${config.text} ${config.border}
-        ${interactive ? `${config.hover} cursor-pointer active:scale-95 hover:shadow-xs` : 'cursor-default'}
-        ${sizeClasses}
-      `}
-      title={interactive ? `Clique para alterar status (Atual: ${config.label})` : config.label}
+      className={baseClasses}
+      title={`Clique para alterar status (Atual: ${config.label})`}
     >
       <Icon className={`${iconSizes} shrink-0 opacity-90`} />
       {showLabel && <span className="whitespace-nowrap tracking-tight">{config.label}</span>}
